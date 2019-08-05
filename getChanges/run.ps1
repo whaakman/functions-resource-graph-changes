@@ -40,9 +40,51 @@ $restUriResourceChanges = "https://management.azure.com/providers/Microsoft.Reso
 # Invoke
 $responseResourceChanges = Invoke-RestMethod -Uri $restUriResourceChanges -Method Post -Body $bodyJsonResourceChanges -Headers $authHeader
 
+foreach ($change in $responseResourceChanges.value ) {
+write-host "change: $change"    
+if ($change.changeId) {
+    # Body Change Details
+    $bodyHashTableResourceChangeDetails = @{
+        resourceId = $resourceID 
+        changeId = $change.changeId
+    }
+    
+    $bodyJsonResourceChangeDetails = $bodyHashTableResourceChangeDetails |ConvertTo-Json
+    # Change details API
+    $restUriResourceChangeDetails = "https://management.azure.com/providers/Microsoft.ResourceGraph/resourceChangeDetails?api-version=2018-09-01-preview"
+    # invoke
+    $responseResourceChangeDetails = Invoke-RestMethod -Uri $restUriResourceChangeDetails -Method Post -Body $bodyJsonResourceChangeDetails -Headers $authHeader 
+}  
+$changeBefore = $responseResourceChangeDetails.beforeSnapshot.content |ConvertTo-Json
+$changeAfter = $responseResourceChangeDetails.afterSnapshot.content |ConvertTo-Json
+
+
+#compare-object -ReferenceObject $responseResourceChangeDetails.beforeSnapshot.content -DifferenceObject $responseResourceChangeDetails.afterSnapshot.content -IncludeEqual
+
+
+$changeBefore > a.txt
+$changeAfter > b.txt
+$checkA = get-content a.txt
+$checkB = get-content b.txt
+$checkA = $checkA |Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
+$checkB = $checkB |Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
+
+# Compare changes
+
+if ($change.changeId){
+    Write-Host "Detected change on resource: $resourceID"
+    
+    $changes += (Compare-Object -ReferenceObject $checkB -DifferenceObject $checkA -PassThru) + "`n"
+    #|format-table @{L='Change Details';E={$_.InputObject}}
+}
+
+
+$output = $changes
+}
+
 if ($resourceID) {
     $status = [HttpStatusCode]::OK
-    $body = "$responseResourceChanges"
+    $body = "$output"
 }
 else {
     $status = [HttpStatusCode]::BadRequest
