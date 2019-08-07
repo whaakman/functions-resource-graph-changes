@@ -33,15 +33,18 @@ $bodyHashTableResourceChanges = @{
         end = $endTime 
     }
 }
+
 $bodyJsonResourceChanges = $bodyHashTableResourceChanges |ConvertTo-Json
+
 # URI Resource changes
 $restUriResourceChanges = "https://management.azure.com/providers/Microsoft.ResourceGraph/resourceChanges?api-version=2018-09-01-preview"
 
 # Invoke
 $responseResourceChanges = Invoke-RestMethod -Uri $restUriResourceChanges -Method Post -Body $bodyJsonResourceChanges -Headers $authHeader
+$detectedChanges = @()
 
 foreach ($change in $responseResourceChanges.value ) {
-write-host "change: $change"    
+   
 if ($change.changeId) {
     # Body Change Details
     $bodyHashTableResourceChangeDetails = @{
@@ -55,40 +58,34 @@ if ($change.changeId) {
     # invoke
     $responseResourceChangeDetails = Invoke-RestMethod -Uri $restUriResourceChangeDetails -Method Post -Body $bodyJsonResourceChangeDetails -Headers $authHeader 
 }  
-$changeBefore = $responseResourceChangeDetails.beforeSnapshot.content |ConvertTo-Json
-$changeAfter = $responseResourceChangeDetails.afterSnapshot.content |ConvertTo-Json
 
+$responseResourceChangeDetails.beforeSnapshot.content |ConvertTo-Json > before.txt
+$changesBefore = get-content before.txt
+$changesBefore = $changesBefore | Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
 
-#compare-object -ReferenceObject $responseResourceChangeDetails.beforeSnapshot.content -DifferenceObject $responseResourceChangeDetails.afterSnapshot.content -IncludeEqual
-
-
-$changeBefore > a.txt
-$changeAfter > b.txt
-$checkA = get-content a.txt
-$checkB = get-content b.txt
-$checkA = $checkA |Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
-$checkB = $checkB |Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
+$responseResourceChangeDetails.afterSnapshot.content |ConvertTo-Json > after.txt
+$changesAfter = get-content after.txt
+$changesAfter = $changesAfter | Where-Object {$_ -notmatch 'lastModifiedTimeUtc'}
 
 # Compare changes
 
 if ($change.changeId){
-    Write-Host "Detected change on resource: $resourceID"
-    
-    $changes += (Compare-Object -ReferenceObject $checkB -DifferenceObject $checkA -PassThru) + "`n"
-    #|format-table @{L='Change Details';E={$_.InputObject}}
+
+    $a = compare-object -ReferenceObject $changesAfter -DifferenceObject $changesBefore
+    $detectedChanges += $a.inputObject
+    }
 }
 
+$detectedChanges = $detectedChanges |convertTo-Json
 
-$output = $changes
-}
 
-if ($resourceID) {
+if ($responseResourceChanges) {
     $status = [HttpStatusCode]::OK
-    $body = "$output"
+    $body = $detectedChanges
 }
 else {
-    $status = [HttpStatusCode]::BadRequest
-    $body = "Please pass a name on the query string or in the request body."
+    $status = [HttpStatusCode]::OK
+    $body = "Change detected but no ChangeID was logged"
 }
 
 # Associate values to output bindings by calling 'Push-OutputBinding'.
@@ -96,3 +93,4 @@ Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
     StatusCode = $status
     Body = $body
 })
+ 
