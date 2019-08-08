@@ -24,7 +24,7 @@ if (-not $resourceID) {
 $endTime = (get-date -uformat '+%Y-%m-%dT%H:%M:%S.000Z')
 $startTime = (get-date (get-date $endTime).AddHours(-6) -uformat '+%Y-%m-%dT%H:%M:%S.000Z')
 
-# Invoke the REST API
+
 # Body for resource change API
 $bodyHashTableResourceChanges = @{
     resourceId = $resourceID 
@@ -41,6 +41,7 @@ $restUriResourceChanges = "https://management.azure.com/providers/Microsoft.Reso
 
 # Invoke
 $responseResourceChanges = Invoke-RestMethod -Uri $restUriResourceChanges -Method Post -Body $bodyJsonResourceChanges -Headers $authHeader
+
 $detectedChanges = @()
 
 foreach ($change in $responseResourceChanges.value ) {
@@ -71,8 +72,8 @@ $changesAfter = $changesAfter | Where-Object {$_ -notmatch 'lastModifiedTimeUtc'
 
 if ($change.changeId){
 
-    $a = compare-object -ReferenceObject $changesAfter -DifferenceObject $changesBefore
-    $detectedChanges += $a.inputObject
+    $comparison = compare-object -ReferenceObject $changesAfter -DifferenceObject $changesBefore
+    $detectedChanges += $comparison.inputObject
     }
 }
 
